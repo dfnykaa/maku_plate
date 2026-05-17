@@ -1,10 +1,33 @@
 local inventory = exports.ox_inventory
 
+function notify(text, type)
+    if isResourcePresent('ox_lib') then
+        lib.notify({
+            title = 'License Plate',
+            description = text,
+            type = type or 'info'
+        })
+    elseif Config.Framework == "esx" then
+        TriggerEvent('esx:showNotification', text)
+    elseif Config.Framework == "qb" then
+        TriggerEvent('QBCore:Notify', text, type or 'primary')
+    else
+        BeginTextCommandString("STRING")
+        AddTextComponentString(text)
+        EndTextCommandDisplayHelp(0, 0, 1, -1)
+    end
+end
+
+RegisterNetEvent('maku_plate:client:notify', function(text, type)
+    notify(text, type)
+end)
+
 function getClosestVehicleToPlayer(plyPos, radius)
     local retval, statusCode = nil, 'unk'
+    local range = radius and radius or Config.ClosestVehicleRange
 
-    if GetClosestVehicle(plyPos.x, plyPos.y, plyPos.z, radius and radius or CLOSEST_VEHICLE_RANGE, 0, 23) then
-        retval = GetClosestVehicle(plyPos.x, plyPos.y, plyPos.z, radius and radius or CLOSEST_VEHICLE_RANGE, 0, 23)
+    if GetClosestVehicle(plyPos.x, plyPos.y, plyPos.z, range, 0, 23) then
+        retval = GetClosestVehicle(plyPos.x, plyPos.y, plyPos.z, range, 0, 23)
         statusCode = 'found_vehicle'
     end
 
@@ -33,13 +56,19 @@ AddEventHandler('maku_plate:client:puton', putOn)
 exports('putOn', putOn)
 
 exports('itemUsage', function(data, slot)
+    local itemData = slot or data
+    if not itemData or not itemData.metadata or not itemData.metadata.plate then
+        notify(Config.Locales['no_matching_plate'], 'error')
+        return
+    end
+
     local vehicle, statusCode = getClosestVehicleToPlayer(GetEntityCoords(PlayerPedId()))
     if DoesEntityExist(vehicle) then
         if statusCode == 'found_vehicle' then
-            putOn(vehicle, slot.metadata.plate)
+            putOn(vehicle, itemData.metadata.plate)
         end
     else
-        print('^1[error]^0 no vehicle found (itemUsage)')
+        notify(Config.Locales['no_vehicle'], 'error')
     end
 end)
 
@@ -49,13 +78,13 @@ if isResourcePresent('ox_target') then
     Citizen.CreateThread(function()
         target:addGlobalVehicle({
             {
-                label = TARGET_TAKE_OFF,
+                label = Config.TargetTakeOff,
                 name = 'takeoffplate',
                 icon = 'fa-solid fa-tarp',
                 distance = 3.0,
                 canInteract = function(vehicle, distance, coords, name, bone)
                     local plate = GetVehicleNumberPlateText(vehicle)
-                    return plate ~= '' and plate ~= EMPTY_PLATE
+                    return plate and plate:gsub('%s+', '') ~= ''
                 end,
                 onSelect = function(data)
                     takeOff(data.entity)
@@ -64,7 +93,7 @@ if isResourcePresent('ox_target') then
         })
     end)
 
-    AddEventHandler('onResourceStop', function(resoure)
+    AddEventHandler('onResourceStop', function(resource)
         if resource ~= GetCurrentResourceName() then return end
         target:removeGlobalVehicle('takeoffplate')
     end)
@@ -74,11 +103,15 @@ else
         local plyPos = GetEntityCoords(plyPed)
         local vehicle, statusCode = getClosestVehicleToPlayer(plyPos)
 
-        if DoesEntityExist(vehicle) then
+        if DoesEntityExist(vehicle) and statusCode == 'found_vehicle' then
             local plate = GetVehicleNumberPlateText(vehicle)
-            takeOff(vehicle)
+            if plate and plate:gsub('%s+', '') ~= '' then
+                takeOff(vehicle)
+            else
+                notify(Config.Locales['no_plate'], 'error')
+            end
         else
-            print('^1[error]^0 no vehicle found (command)')
+            notify(Config.Locales['no_vehicle'], 'error')
         end
     end, false)
 end
