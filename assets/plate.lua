@@ -1,6 +1,9 @@
+local original_GetVehicleNumberPlateText = GetVehicleNumberPlateText
+
 GetVehicleNumberPlateText = function(vehicle)
-    local plate = GetVehicleNumberPlateText(vehicle)
-    if plate:gsub('%s+', '') == '' then
+    if not DoesEntityExist(vehicle) then return nil end
+    local plate = original_GetVehicleNumberPlateText(vehicle)
+    if plate and plate:gsub('%s+', '') == '' then
         local statebag = Entity(vehicle).state.plate
         if statebag ~= nil then
             plate = statebag
